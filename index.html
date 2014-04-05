@@ -9,6 +9,7 @@
 <body>
 <script>
 var camera = null;
+var idx, tex;
 function doIt(id) {
   stats = new Stats();
   stats.domElement.style.position = 'absolute';
@@ -16,7 +17,7 @@ function doIt(id) {
   stats.domElement.style.zIndex = 100;
   document.body.appendChild( stats.domElement );
   // speed of moving stuff: 30 second music clip, 60fps
-  var SPEED = 0.0055;
+  var SPEED = 0.0015;
   // distance at which the sprites appear.
   var HORIZON = -10;
 
@@ -58,7 +59,7 @@ function doIt(id) {
 
   var scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.z = -1;
+  camera.position.z = 0;
 
   var current = [];
   var renderer = new THREE.WebGLRenderer();
@@ -66,10 +67,7 @@ function doIt(id) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  function addSprite() {
-    var idx = Math.floor(Math.random() * textures.length)
-    // console.log(textures[idx])
-    var tex = textures[idx].normal;
+  function addSpriteInternal(tex) {
     var inity = -10;
     for (var i = 0; i < GRID_WIDTH; i++) {
       var initx = -10;
@@ -77,8 +75,7 @@ function doIt(id) {
         var geometry = new THREE.PlaneGeometry( 1, 1 );
         var sp = new THREE.Mesh(geometry, tex);
         // var sp = new THREE.Sprite(tex);
-        sp.position.z = HORIZON;
-        sp.position.zz = HORIZON;
+        // sp.position.z = HORIZON;
         sp.position.x = initx;
         sp.position.y = inity;
         initx++;
@@ -89,16 +86,32 @@ function doIt(id) {
     }
   };
 
-  addSprite();
+  idx = Math.floor(Math.random() * textures.length);
+  // console.log(textures[idx])
+  tex = textures[idx].normal;
+
+  function addSpriteInitial() {
+    addSpriteInternal(tex);
+  }
+
+  function switchSprite() {
+    current.forEach(function(e) { scene.remove(e) });
+    current = [];
+    addSpriteInternal(textures[idx].mosaic);
+  }
+
+  addSpriteInitial();
 
   var array = new Float32Array(GRID_WIDTH);
 
   var ac = new AudioContext();
   var analyser = ac.createAnalyser();
   analyser.frequencyBinCount = GRID_WIDTH;
-  // analyser.connect(ac.destination);
+  analyser.connect(ac.destination);
 
   var currentz = HORIZON;
+
+  var switched = false;
 
   function render() {
     stats.begin();
@@ -106,6 +119,7 @@ function doIt(id) {
     analyser.getFloatFrequencyData(array);
     var index = 0;
     currentz += SPEED;
+    var middletilez = 0;
     for (var i = 0; i < current.length; i++) {
       var x = i % GRID_WIDTH;
       var y = Math.floor(i / GRID_HEIGHT);
@@ -116,15 +130,31 @@ function doIt(id) {
       var dist = Math.floor(Math.sqrt(dx * dx + dy * dy));
 
       var sp = - (array[dist] - analyser.minDecibels) / analyser.maxDecibels;
-      current[i].position.z = currentz + sp * 5;
+      current[i].position.z = currentz + sp * 2;
+      if (dist < 1) {
+        middletilez = current[i].position.z;
+      }
     }
     index++;
     var f = current[0];
-    if (f.position.z > camera.position.z) {
+    // console.log(currentz);
+    if (currentz > -5 && !switched) {
+      if (textures[idx].mosaic) {
+        console.log("switching at " + currentz);
+        switched = true;
+        switchSprite();
+      }
+    }
+    if (middletilez > camera.position.z) {
+      console.log("newtiles");
       current.forEach(function(e) { scene.remove(e) });
       current = [];
       currentz = HORIZON;
-      addSprite();
+      switched = false;
+      idx = Math.floor(Math.random() * textures.length);
+      // console.log(textures[idx])
+      tex = textures[idx].normal;
+      addSpriteInternal(tex);
     }
     controls.update();
     renderer.render(scene, camera);
