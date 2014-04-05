@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+<script src="lib/three.js"></script>
+<script src="lib/stats.js"></script>
+<meta charset="utf-8">
+</head>
+<body>
+<script>
+function doIt(id) {
+  stats = new Stats();
+  stats.domElement.style.position = 'absolute';
+  stats.domElement.style.bottom = '0px';
+  stats.domElement.style.zIndex = 100;
+  document.body.appendChild( stats.domElement );
+  // speed of moving stuff: 30 second music clip, 60fps
+  var SPEED = 0.0055;
+  // distance at which the sprites appear.
+  var HORIZON = -10;
+
+  var GRID_WIDTH = 20;
+  var GRID_HEIGHT = 20;
+
+  var ids = [
+    '1f1a2ea9-f217-464d-83c8-5bb10b1c5f4b',
+    'e5b02066-1fbd-4872-b4cd-4df578ec6c2f',
+    '5c0489fc-6dd8-4dc1-a0dc-b742fde1b3f8',
+    '8b23d96e-b682-42d7-90ac-c1511a268b51'
+  ];
+
+  var textures = [];
+
+  function loadTexFromUUID(uuid) {
+    var map = THREE.ImageUtils.loadTexture("http://192.168.0.116:8080/image/" + uuid);
+    var material = new THREE.SpriteMaterial({ map: map, color: 0xffffff, fog: true });
+    textures.push(material);
+  }
+
+  for (var i = 0; i < ids.length; i++) {
+    loadTexFromUUID(ids[i]);
+  }
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+  camera.position.z = 0;
+
+  var current = [];
+  var renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  function addSprite() {
+    var idx = Math.floor(Math.random() * textures.length)
+    var tex = textures[idx];
+    var inity = -10;
+    for (var i = 0; i < GRID_WIDTH; i++) {
+      var initx = -10;
+      for (var j = 0; j < GRID_HEIGHT; j++) {
+        var sp = new THREE.Sprite(tex);
+        sp.position.z = HORIZON;
+        sp.position.zz = HORIZON;
+        sp.position.x = initx;
+        sp.position.y = inity;
+        initx++;
+        scene.add(sp);
+        current.push(sp);
+      }
+      inity++;
+    }
+  };
+
+
+  addSprite();
+
+  var array = new Float32Array(GRID_WIDTH);
+
+  var ac = new AudioContext();
+  var analyser = ac.createAnalyser();
+  analyser.frequencyBinCount = GRID_WIDTH;
+  // analyser.connect(ac.destination);
+
+  var currentz = HORIZON;
+
+  function render() {
+    stats.begin();
+    requestAnimationFrame(render);
+    analyser.getFloatFrequencyData(array);
+    var index = 0;
+    currentz += SPEED;
+    for (var i = 0; i < current.length; i++) {
+      var x = i % GRID_WIDTH;
+      var y = Math.floor(i / GRID_HEIGHT);
+      var centerx = GRID_WIDTH / 2;
+      var centery = GRID_HEIGHT / 2;
+      var dx = centerx - x;
+      var dy = centery - y;
+      var dist = Math.floor(Math.sqrt(dx * dx + dy * dy));
+
+      var sp = - (array[dist] - analyser.minDecibels) / analyser.maxDecibels;
+      current[i].position.z = currentz + sp;
+    }
+    index++;
+    var f = current[0];
+    if (f.position.z > camera.position.z) {
+      current.forEach(function(e) { scene.remove(e) });
+      current = [];
+      currentz = HORIZON;
+      addSprite();
+    }
+    renderer.render(scene, camera);
+    stats.end();
+  }
+  render();
+
+  function DZPlayer(id, destNode) {
+    this.id = id;
+    this.audio = new Audio();
+    this.xhr = new XMLHttpRequest();
+    this.xhr2 = new XMLHttpRequest();
+    this.destNode = destNode;
+  }
+
+  DZPlayer.prototype.load = function(callback) {
+    var _this = this;
+    this.xhr.addEventListener("readystatechange", function (e) {
+      if (_this.xhr.readyState == 4) {
+        if (_this.xhr.status == 200) {
+          var json = JSON.parse(_this.xhr.response);
+          _this.xhr2.addEventListener("readystatechange", function (e) {
+            if (_this.xhr2.readyState == 4) {
+              if (_this.xhr2.status == 200) {
+                  _this.destNode.context.decodeAudioData(_this.xhr2.response, function(b) {
+                    var bs = _this.destNode.context.createBufferSource();
+                    bs.buffer = b;
+                    bs.connect(_this.destNode);
+                    bs.loop = true;
+                    bs.start();
+                }, function() {
+                console.log("error");
+                });
+                console.log(_this.xhr2);
+              }
+            }
+          })
+
+          _this.xhr2.open("GET", "http://127.0.0.1:9292/" + json.preview.replace("http://", ""), true);
+          _this.xhr2.responseType = 'arraybuffer';
+          _this.xhr2.send(null);
+        }
+      }
+    });
+
+    this.xhr.open("GET", "http://www.corsproxy.com/api.deezer.com/track/" + this.id, true);
+    this.xhr.send(null);
+  }
+
+  DZPlayer.prototype.play = function() {
+    this.audio.play();
+    this.mes = this.destNode.context.createMediaElementSource(this.audio);
+    this.mes.connect(this.destNode);
+  }
+
+  var p = new DZPlayer(id, analyser);
+  p.load(function() {
+    p.play();
+  })
+}
+
+window.onload = function() {
+  document.querySelector("#doit").addEventListener("click", function() {
+    doIt(document.querySelector("#tehid").value);
+    document.querySelector("#landing").style.display = "none";
+  });
+}
+
+</script>
+</body>
+<style>
+#title {
+  text-align: center;
+}
+
+#tehid {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 10em);
+  width: 20em;
+}
+
+#authors {
+  position: absolute;
+  bottom: 5%;
+  right: 5%;
+}
+</style>
+<div id=landing>
+  <h1 id=title>
+    The title
+  </h1>
+  <div class=aligner-item>
+    <input id=tehid></input>
+    <button id=doit>DO IT!</button>
+  </div>
+    <span id=authors>
+      The dudes
+    </span>
+</div>
+</html>
