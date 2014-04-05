@@ -3,11 +3,10 @@
 import os
 import sys
 from werkzeug.exceptions import NotFound, BadRequest, InternalServerError
+from config import COVERART_DIR
     
 from flask import Flask, Response
 app = Flask(__name__)
-
-COVERART_DIR = "/home/robert/musicbrainz/coverart"
 
 @app.route("/image/<mbid>")
 def serve_image(mbid):
@@ -31,6 +30,8 @@ def serve_mosaic(mbid, img_size, tile_size):
 
     if img_size % tile_size != 0:
         raise BadRequest
+
+    self.conn = psycopg2.connect("dbname=mcoverart user=mcoverart")
 
     return "ok"
 

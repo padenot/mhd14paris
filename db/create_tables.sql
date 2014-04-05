@@ -10,4 +10,7 @@ CREATE TABLE release (
     color      CUBE
 );
 
+CREATE UNIQUE INDEX mbid_undx ON release (mbid);
+CREATE INDEX deezer_undx ON release (deezer_id);
+
 COMMIT;
