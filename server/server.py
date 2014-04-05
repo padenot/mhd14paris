@@ -4,6 +4,7 @@ import os
 import sys
 from werkzeug.exceptions import NotFound, BadRequest, InternalServerError
 from config import COVERART_DIR
+import index
     
 from flask import Flask, Response
 app = Flask(__name__)
@@ -31,9 +32,13 @@ def serve_mosaic(mbid, img_size, tile_size):
     if img_size % tile_size != 0:
         raise BadRequest
 
-    self.conn = psycopg2.connect("dbname=mcoverart user=mcoverart")
-
     return "ok"
 
 if __name__ == "__main__":
+    print "Loading color index..."
+    ci = index.ColorIndex()
+    ci.load_index()
+
+    print "Starting app..."
+    app.color_index = ci
     app.run(debug=True, host="0.0.0.0", port=8080)
