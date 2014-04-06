@@ -217,9 +217,11 @@ function doIt(id) {
     this.destNode = destNode;
     this.currentSampleEndTime = 0;
     this.currentBS = null;
+    this.currentGain = null;
     this.currentBSStart = 0;
     this.nextBS = null;
     this.nextBSStart = Infinity;
+    this.nextGain = null;
     this._queued = false;
   }
 
@@ -267,12 +269,18 @@ function doIt(id) {
     if (!this.currentBS) {
       this.currentBS = this.destNode.context.createBufferSource();
       this.currentBS.buffer = b;
-      this.currentBS.connect(this.destNode);
+      this.currentGain = this.destNode.context.createGain();
+      this.currentBS.connect(this.currentGain);
+      this.currentGain.connect(this.destNode);
       return this.currentBS;
     } else {
       this.nextBS = this.destNode.context.createBufferSource();
       this.nextBS.buffer = b;
-      this.nextBS.connect(this.destNode);
+      this.nextGain = this.destNode.context.createGain();
+      this.nextBS.connect(this.nextGain);
+      this.nextGain.connect(this.destNode);
+      // initialy silent
+      this.nextGain.gain.setValueAtTime(0.0, this.destNode.context.currentTime);
       return this.nextBS;
     }
   }
@@ -285,24 +293,34 @@ function doIt(id) {
     if (this.currentBS.context.currentTime > this.nextBSStart) {
       console.log("playing the new");
       this.currentBS = this.nextBS;
+      this.currentGain = this.nextGain;
       this.currentBSStart = this.nextBSStart;
       this.nextBS = null;
       this.nextBSStart = Infinity;
+      this.nextGain = null;
       this._queued = false;
     }
   }
 
+  // 1.0: play the whole tune, 0.5: play half of it, etc.
+  var TUNE_LENGTH_RATIO = 1.0;
 
   DZPlayer.prototype.remaining = function() {
-    return this.currentBSStart + this.currentBS.buffer.duration - this.currentBS.context.currentTime;
+    return this.currentBSStart + this.currentBS.buffer.duration / TUNE_LENGTH_RATIO - this.currentBS.context.currentTime;
   }
+
+  var FADE = 2.0; // second
+  var TIMECONSTANT = 1.33;
 
   DZPlayer.prototype.chainTo = function(id) {
     this._queued = true;
     var _this = this;
     this.load(id, function (node) {
-      _this.nextBSStart = _this.currentBS.context.currentTime + _this.remaining();
+      _this.nextBSStart = _this.currentBS.context.currentTime + _this.remaining() - FADE;
       console.log("scheduling the next for " + _this.nextBSStart);
+      // fade in-out
+      _this.nextGain.gain.setTargetAtTime(1.0, _this.nextBSStart, TIMECONSTANT);
+      _this.currentGain.gain.setTargetAtTime(0.0, _this.nextBSStart, TIMECONSTANT);
       node.start(_this.nextBSStart);
     });
   }
