@@ -7,8 +7,24 @@ from config import COVERART_DIR
 import index
 import mosaic
     
-from flask import Flask, Response
-app = Flask(__name__)
+STATIC_PATH = "/static"
+STATIC_FOLDER = "static"
+TEMPLATE_FOLDER = "templates"
+
+from flask import Flask, Response, render_template, request
+app = Flask(__name__,
+            static_url_path = STATIC_PATH,
+            static_folder = STATIC_FOLDER,
+            template_folder = TEMPLATE_FOLDER)
+
+@app.route("/")
+def serve_index():
+    return render_template("index", title="Coverart Nonsense!")
+
+@app.route("/nonsense", methods=['POST'])
+def serve_nonsense():
+    mbid = request.form.get('mbid')
+    return render_template("nonsense", mbid=mbid)
 
 @app.route("/image/<mbid>")
 def serve_image(mbid):
@@ -39,10 +55,10 @@ def serve_mosaic(mbid, img_size, tile_size):
     r.headers.add("Access-Control-Allow-Origin", "*")
     return r
 
-@app.route("/next/<mbid>/<int:x>/<int:y>")
-def next_mbid(mbid, x, y):
+@app.route("/next/<mbid>/<int:img_size>/<int:tile_size>/<int:x>/<int:y>")
+def next_mbid(mbid, img_size, tile_size, x, y):
     mg = mosaic.MosaicGenerator(app.color_index)
-    mbid = mg.next_mbid(mbid, x, y)
+    mbid = mg.next_mbid(mbid, img_size, tile_size, x, y)
     if not mbid:
         raise BadRequest
 
