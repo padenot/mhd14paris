@@ -22,6 +22,28 @@ var p;
 
 var filterStrength = 20;
 var frameTime = 0, lastLoop = new Date, thisLoop;
+var currentMBID = 0;
+var nextMBID = 0;
+var justswitchedtune = false;
+
+  var ids = [
+    '0ef4ed28-a4ab-4596-b29b-03415413fef5',
+ //    'e8c47146-64a1-4d44-b496-be0938f92d28',
+ //    '4b770610-8bb6-4de4-8666-d1acb9940fe9',
+ //    '1f1a2ea9-f217-464d-83c8-5bb10b1c5f4b',
+ //    'e5b02066-1fbd-4872-b4cd-4df578ec6c2f',
+ //    '5c0489fc-6dd8-4dc1-a0dc-b742fde1b3f8',
+ //    '8b23d96e-b682-42d7-90ac-c1511a268b51'
+  ];
+
+  var trackIndex = 0;
+  var tracks = [
+   72549484,
+   69910347,
+   71265932,
+   60815553,
+   10201454
+  ]
 
 
 function doIt(id) {
@@ -34,46 +56,53 @@ function doIt(id) {
   var GRID_WIDTH = 20;
   var GRID_HEIGHT = 20;
 
-  var ids = [
-    '1f1a2ea9-f217-464d-83c8-5bb10b1c5f4b',
-    'e5b02066-1fbd-4872-b4cd-4df578ec6c2f',
-    '5c0489fc-6dd8-4dc1-a0dc-b742fde1b3f8',
-    '8b23d96e-b682-42d7-90ac-c1511a268b51'
-  ];
+  currentMBID = ids[0];
 
   textures = [];
 
   function loadTexFromUUID(uuid) {
     var textureset = {};
     var mosaic = null;
+
+    console.log("loading normal :  http://192.168.0.116:8080/image/" + uuid)
     var normal = THREE.ImageUtils.loadTexture("http://192.168.0.116:8080/image/" + uuid, THREE.UVMapping, function() {
-      mosaic = THREE.ImageUtils.loadTexture("http://192.168.0.116:8080/mosaic/" + uuid + "/500/10", THREE.UVMapping, function () {
-        console.log("mos");
+      mosaic = THREE.ImageUtils.loadTexture("http://192.168.0.116:8080/mosaic/" + uuid + "/500/20", THREE.UVMapping, function () {
+        console.log("mosaic loaded.");
         textureset.mosaic = new THREE.MeshBasicMaterial({ map: mosaic, color: 0xffffff, fog: true });
         textureset.mosaic.transparent = true;
         textureset.mosaic.opacity = 0.4;
         textureset.mosaic.depthWrite = true;
         textureset.mosaic.combine = THREE.MixOperation;
       });
-      console.log("normal");
+      console.log("normal cover art loaded.");
     });
     textureset.normal = new THREE.MeshBasicMaterial({ map: normal, color: 0xffffff, fog: true });
     textureset.normal.transparent = true;
     textureset.normal.opacity = 1.0;
     textureset.normal.depthWrite = true;
     textureset.normal.combine = THREE.MixOperation;
-    textures.push(textureset);
+    textures[uuid] = textureset;
   }
 
   for (var i = 0; i < ids.length; i++) {
     loadTexFromUUID(ids[i]);
   }
 
-  // window.onmousemove = function (e) {
-  //   var x = e.layerX - window.innerWidth / 2;
-  //   console.log(x);
-  //   camera.lookAt(new THREE.Vector3(x, 0, 0.0));
-  // }
+  // Get the next
+  function getNext(callback) {
+    var xhr = new XMLHttpRequest();
+    var _this = this;
+    xhr.addEventListener("readystatechange", function (e) {
+      if (xhr.readyState == 4) {
+        if (xhr.status == 200) {
+          callback(xhr.responseText);
+        }
+      }
+    });
+
+    xhr.open("GET", "http://192.168.0.116:8080/next/"+ currentMBID + "/" + "500" + "/" + 20 + "/" + 230 + "/" + 230, true);
+    xhr.send(null);
+  }
 
   var scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -106,20 +135,16 @@ function doIt(id) {
     }
   };
 
-  idx = Math.floor(Math.random() * textures.length);
-  // console.log(textures[idx])
-  tex = textures[idx].normal;
-  // tex.opacity = 0.4;
-
-  function addSpriteInitial() {
-    addSpriteInternal(tex);
-  }
+  tex = textures[currentMBID].normal;
+  addSpriteInternal(tex);
+  getNext(function(uuid) {
+    nextMBID = uuid;
+    loadTexFromUUID(uuid);
+  });
 
   function switchSprite() {
-    addSpriteInternal(textures[idx].mosaic);
+    addSpriteInternal(textures[currentMBID].mosaic);
   }
-
-  addSpriteInitial();
 
   var array = new Float32Array(GRID_WIDTH);
 
@@ -136,10 +161,10 @@ function doIt(id) {
     // console.log(p.remaining());
     // quick, load the next song.
     p.updateCurrentPrev();
-    if (p.remaining() < 20 && !p.queued()) {
-      console.log("loading new");
-      p.chainTo(3135557);
-    }
+    // if (p.remaining() < 20 && !p.queued()) {
+    //   console.log("loading new");
+    //   p.chainTo(3135557);
+    // }
     stats.begin();
     requestAnimationFrame(render);
     analyser.getFloatFrequencyData(array);
@@ -165,7 +190,9 @@ function doIt(id) {
     }
     var f = current[0];
     // console.log(currentz);
-    if (currentz > -5) {
+    // when we reach -8, we switch to the mosaic if we can
+    if (currentz > -8) {
+      // transparency transition
       if (current.length > GRID_WIDTH * GRID_HEIGHT) {
         console.log("opacity: " + current[0].material.opacity);
         current[0].material.opacity -= 0.1;
@@ -180,13 +207,17 @@ function doIt(id) {
           current = current.slice(current.length / 2);
         }
       }
-      if (!switched && textures[idx].mosaic) {
+      if (!switched && textures[currentMBID].mosaic) {
         console.log("switching at " + currentz);
         switched = true;
         switchSprite();
+        getNext(function(uuid) {
+          nextMBID = uuid;
+          loadTexFromUUID(uuid);
+        })
       }
     }
-    if (middletilez > camera.position.z) {
+    if (middletilez > camera.position.z || justswitchedtune) {
       console.log("newtiles");
       current.forEach(function(e) { scene.remove(e) });
       current = [];
@@ -194,7 +225,8 @@ function doIt(id) {
       switched = false;
       idx = Math.floor(Math.random() * textures.length);
       // console.log(textures[idx])
-      tex = textures[idx].normal;
+      currentMBID = nextMBID;
+      tex = textures[currentMBID].normal;
       addSpriteInternal(tex);
     }
     controls.update();
@@ -207,8 +239,8 @@ function doIt(id) {
     // console.log("fps: " + (1000 / frameTime));
     // mmmmmeeeeehhhh.
     // console.log(p.remaining() / (frameTime * 1000));
-    // console.log((camera.position.z - middletilez) / (p.remaining() / (frameTime * 60 * 1000)));
-    // console.log( middletilez - camera.position.z + "speed: " + SPEED);
+    SPEED = (camera.position.z - middletilez) / ((p.remaining() * 1000) / frameTime);
+    // console.log(middletilez - camera.position.z + "speed: " + SPEED);
   }
 
   function DZPlayer(destNode) {
@@ -245,6 +277,7 @@ function doIt(id) {
             }
           })
 
+          console.log(json);
           var str = "http://127.0.0.1:9292/" + json.preview.replace("http://", "");
           console.log(str);
           _this.xhr2.open("GET", str, true);
@@ -254,6 +287,7 @@ function doIt(id) {
       }
     });
 
+    console.log("requesting id: " + id);
     this.xhr.open("GET", "http://127.0.0.1:9292/api.deezer.com/track/" + id, true);
     this.xhr.send(null);
   }
@@ -292,6 +326,7 @@ function doIt(id) {
   DZPlayer.prototype.updateCurrentPrev = function() {
     if (this.currentBS.context.currentTime > this.nextBSStart) {
       console.log("playing the new");
+      justswitchedtune = true;
       this.currentBS = this.nextBS;
       this.currentGain = this.nextGain;
       this.currentBSStart = this.nextBSStart;
@@ -299,6 +334,10 @@ function doIt(id) {
       this.nextBSStart = Infinity;
       this.nextGain = null;
       this._queued = false;
+      // kick off the next song loading
+      this.chainTo(tracks[trackIndex++]);
+    } else {
+      justswitchedtune = false;
     }
   }
 
@@ -306,11 +345,12 @@ function doIt(id) {
   var TUNE_LENGTH_RATIO = 1.0;
 
   DZPlayer.prototype.remaining = function() {
-    return this.currentBSStart + this.currentBS.buffer.duration / TUNE_LENGTH_RATIO - this.currentBS.context.currentTime;
+    // console.log(this.currentBSStart, this.currentBS.buffer.duration * TUNE_LENGTH_RATIO, this.currentBS.context.currentTime)
+    return this.currentBSStart + this.currentBS.buffer.duration * TUNE_LENGTH_RATIO - this.currentBS.context.currentTime;
   }
 
-  var FADE = 2.0; // second
-  var TIMECONSTANT = 1.33;
+  var FADE = 1.0; // second
+  var TIMECONSTANT = 0.33;
 
   DZPlayer.prototype.chainTo = function(id) {
     this._queued = true;
@@ -329,13 +369,15 @@ function doIt(id) {
   p.load(id, function() {
     p.play();
     render(p);
+    p.chainTo(tracks[trackIndex++]);
   });
 }
+
 
 window.onload = function() {
   //document.querySelector("#doit").addEventListener("click", function() {
     // doIt(document.querySelector("#tehid").value);
-  doIt(3135556);
+  doIt(tracks[trackIndex++]);
     document.querySelector("#landing").style.display = "none";
 //  });
 }
